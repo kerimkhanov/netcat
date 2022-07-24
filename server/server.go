@@ -6,18 +6,19 @@ import (
 	"log"
 	"net"
 	"os"
+	"strings"
 	"time"
 )
 
 var (
-	listen  = flag.Bool("l", false, "Listen")
-	host    = flag.String("h", "localhost", "Host")
-	port    = flag.Int("p", 8989, "Port")
 	channel = make(chan string, 1)
 	allUser = make(map[net.Conn]string)
+	host    = flag.String("h", "localhost", "Host")
+	port    = flag.Int("p", 8989, "Port")
 )
 
-func startServer() {
+func StartServer() {
+
 	addr := fmt.Sprintf("%s:%d", *host, *port)
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -33,7 +34,7 @@ func startServer() {
 	log.Printf("Listening for connections on %s", listener.Addr().String())
 	for {
 		conn, err := listener.Accept()
-		if len(allUser) > 2 {
+		if len(allUser) > 10 {
 			conn.Write([]byte("Sorry, your connection is close. More than 10 users"))
 			conn.Close()
 		}
@@ -48,16 +49,20 @@ func startServer() {
 func processClient(conn net.Conn, f *os.File) {
 	input := make([]byte, 1024)
 	n, _ := conn.Read(input)
-	read, err := os.ReadFile(f.Name())
-	for _, w := range read {
-		fmt.Printf("%v", w)
+	for _, users := range allUser {
+		if users == string(input[:n]) {
+			conn.Write([]byte("Your nickname is busy"))
+			conn.Close()
+			return
+		}
 	}
+	read, err := os.ReadFile(f.Name())
 	if err != nil {
 		fmt.Println(err)
 	}
-	conn.Write(read)
+	conn.Write([]byte(strings.TrimRight(string(read), "\n")))
 	allUser[conn] = string(input[:n])
-	channel <- fmt.Sprintf("%s join\n", allUser[conn])
+	channel <- fmt.Sprintf("\n%s join\n", allUser[conn])
 	dead := make(chan bool, 1)
 	go toChannel(conn, dead)
 	go fromChannel(conn, dead, f)
@@ -68,7 +73,7 @@ func toChannel(conn net.Conn, dead chan bool) {
 		input := make([]byte, 1024)
 		n, err := conn.Read(input)
 		if err != nil {
-			channel <- fmt.Sprintf("%s left\n", allUser[conn])
+			channel <- fmt.Sprintf("\n%s left\n", allUser[conn])
 			dead <- true
 			delete(allUser, conn)
 			return
@@ -80,11 +85,11 @@ func fromChannel(conn net.Conn, dead chan bool, f *os.File) {
 	for {
 		select {
 		case msg := <-channel:
-			f.WriteString(msg)
+			f.WriteString(strings.TrimLeft(msg, "\n"))
 			for item := range allUser {
 				item.Write([]byte(msg))
-				// item.Write(strings.Trim([]byte(fmt.Sprintf("[%s:%s]:", time.Now().Format("02-01-2006 15:04:05"), allUser[item])))
-				item.Write([]byte(fmt.Sprintf("\r[%s:%s]:", time.Now().Format("02-01-2006 15:04:05"), allUser[item])))
+				time.Sleep(time.Second / 1000)
+				item.Write([]byte(fmt.Sprintf("[%s]:[%s]:", time.Now().Format("02-01-2006 15:04:05"), allUser[item])))
 			}
 		case <-dead:
 			return

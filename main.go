@@ -3,12 +3,18 @@ package main
 import (
 	"flag"
 	"fmt"
+	"netcat/client"
+	"netcat/server"
+)
+
+var (
+	listen = flag.Bool("l", false, "Listen")
 )
 
 func main() {
 	flag.Parse()
 	if *listen {
-		startServer()
+		server.StartServer()
 		return
 	}
 	if len(flag.Args()) < 2 {
@@ -17,5 +23,5 @@ func main() {
 	}
 	serverHost := flag.Arg(0)
 	serverPort := flag.Arg(1)
-	startClient(fmt.Sprintf("%s:%s", serverHost, serverPort))
+	client.StartClient(fmt.Sprintf("%s:%s", serverHost, serverPort))
 }
